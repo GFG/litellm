@@ -362,18 +362,22 @@ class OpenAIChatCompletion(BaseLLM):
         - call chat.completions.create by default
         """
         try:
-            raw_response = (
-                await openai_aclient.chat.completions.with_raw_response.create(
-                    **data, timeout=timeout
+            if litellm.return_response_headers is True:
+                raw_response = (
+                    await openai_aclient.chat.completions.with_raw_response.create(
+                        **data, timeout=timeout
+                    )
                 )
-            )
 
-            if hasattr(raw_response, "headers"):
-                headers = dict(raw_response.headers)
+                if hasattr(raw_response, "headers"):
+                    headers = dict(raw_response.headers)
+                else:
+                    headers = {}
+                response = raw_response.parse()
+                return headers, response
             else:
-                headers = {}
-            response = raw_response.parse()
-            return headers, response
+                response = openai_aclient.chat.completions.create(**data, timeout=timeout)  # type: ignore
+                return {}, response
         except Exception as e:
             raise e
 
@@ -390,16 +394,20 @@ class OpenAIChatCompletion(BaseLLM):
         """
         raw_response = None
         try:
-            raw_response = openai_client.chat.completions.with_raw_response.create(
-                **data, timeout=timeout
-            )
+            if litellm.return_response_headers is True:
+                raw_response = openai_client.chat.completions.with_raw_response.create(
+                    **data, timeout=timeout
+                )
 
-            if hasattr(raw_response, "headers"):
-                headers = dict(raw_response.headers)
+                if hasattr(raw_response, "headers"):
+                    headers = dict(raw_response.headers)
+                else:
+                    headers = {}
+                response = raw_response.parse()
+                return headers, response
             else:
-                headers = {}
-            response = raw_response.parse()
-            return headers, response
+                response = openai_client.chat.completions.create(**data, timeout=timeout)  # type: ignore
+                return {}, response
         except Exception as e:
             if raw_response is not None:
                 raise Exception(
@@ -1901,28 +1909,28 @@ class OpenAIAssistantsAPI(BaseLLM):
 
     @overload
     def get_assistants(
-        self, 
+        self,
         api_key: Optional[str],
         api_base: Optional[str],
         timeout: Union[float, httpx.Timeout],
         max_retries: Optional[int],
         organization: Optional[str],
         client: Optional[AsyncOpenAI],
-        aget_assistants: Literal[True], 
+        aget_assistants: Literal[True],
     ) -> Coroutine[None, None, AsyncCursorPage[Assistant]]:
         ...
 
     @overload
     def get_assistants(
-        self, 
+        self,
         api_key: Optional[str],
         api_base: Optional[str],
         timeout: Union[float, httpx.Timeout],
         max_retries: Optional[int],
         organization: Optional[str],
         client: Optional[OpenAI],
-        aget_assistants: Optional[Literal[False]], 
-    ) -> SyncCursorPage[Assistant]: 
+        aget_assistants: Optional[Literal[False]],
+    ) -> SyncCursorPage[Assistant]:
         ...
 
     # fmt: on
@@ -2111,7 +2119,7 @@ class OpenAIAssistantsAPI(BaseLLM):
 
     @overload
     def add_message(
-        self, 
+        self,
         thread_id: str,
         message_data: dict,
         api_key: Optional[str],
@@ -2120,13 +2128,13 @@ class OpenAIAssistantsAPI(BaseLLM):
         max_retries: Optional[int],
         organization: Optional[str],
         client: Optional[AsyncOpenAI],
-        a_add_message: Literal[True], 
+        a_add_message: Literal[True],
     ) -> Coroutine[None, None, OpenAIMessage]:
         ...
 
     @overload
     def add_message(
-        self, 
+        self,
         thread_id: str,
         message_data: dict,
         api_key: Optional[str],
@@ -2135,8 +2143,8 @@ class OpenAIAssistantsAPI(BaseLLM):
         max_retries: Optional[int],
         organization: Optional[str],
         client: Optional[OpenAI],
-        a_add_message: Optional[Literal[False]], 
-    ) -> OpenAIMessage: 
+        a_add_message: Optional[Literal[False]],
+    ) -> OpenAIMessage:
         ...
 
     # fmt: on
@@ -2212,7 +2220,7 @@ class OpenAIAssistantsAPI(BaseLLM):
 
     @overload
     def get_messages(
-        self, 
+        self,
         thread_id: str,
         api_key: Optional[str],
         api_base: Optional[str],
@@ -2220,13 +2228,13 @@ class OpenAIAssistantsAPI(BaseLLM):
         max_retries: Optional[int],
         organization: Optional[str],
         client: Optional[AsyncOpenAI],
-        aget_messages: Literal[True], 
+        aget_messages: Literal[True],
     ) -> Coroutine[None, None, AsyncCursorPage[OpenAIMessage]]:
         ...
 
     @overload
     def get_messages(
-        self, 
+        self,
         thread_id: str,
         api_key: Optional[str],
         api_base: Optional[str],
@@ -2234,8 +2242,8 @@ class OpenAIAssistantsAPI(BaseLLM):
         max_retries: Optional[int],
         organization: Optional[str],
         client: Optional[OpenAI],
-        aget_messages: Optional[Literal[False]], 
-    ) -> SyncCursorPage[OpenAIMessage]: 
+        aget_messages: Optional[Literal[False]],
+    ) -> SyncCursorPage[OpenAIMessage]:
         ...
 
     # fmt: on
@@ -2310,7 +2318,7 @@ class OpenAIAssistantsAPI(BaseLLM):
 
     @overload
     def create_thread(
-        self, 
+        self,
         metadata: Optional[dict],
         api_key: Optional[str],
         api_base: Optional[str],
@@ -2319,13 +2327,13 @@ class OpenAIAssistantsAPI(BaseLLM):
         organization: Optional[str],
         messages: Optional[Iterable[OpenAICreateThreadParamsMessage]],
         client: Optional[AsyncOpenAI],
-        acreate_thread: Literal[True], 
+        acreate_thread: Literal[True],
     ) -> Coroutine[None, None, Thread]:
         ...
 
     @overload
     def create_thread(
-        self, 
+        self,
         metadata: Optional[dict],
         api_key: Optional[str],
         api_base: Optional[str],
@@ -2334,8 +2342,8 @@ class OpenAIAssistantsAPI(BaseLLM):
         organization: Optional[str],
         messages: Optional[Iterable[OpenAICreateThreadParamsMessage]],
         client: Optional[OpenAI],
-        acreate_thread: Optional[Literal[False]], 
-    ) -> Thread: 
+        acreate_thread: Optional[Literal[False]],
+    ) -> Thread:
         ...
 
     # fmt: on
@@ -2419,7 +2427,7 @@ class OpenAIAssistantsAPI(BaseLLM):
 
     @overload
     def get_thread(
-        self, 
+        self,
         thread_id: str,
         api_key: Optional[str],
         api_base: Optional[str],
@@ -2427,13 +2435,13 @@ class OpenAIAssistantsAPI(BaseLLM):
         max_retries: Optional[int],
         organization: Optional[str],
         client: Optional[AsyncOpenAI],
-        aget_thread: Literal[True], 
+        aget_thread: Literal[True],
     ) -> Coroutine[None, None, Thread]:
         ...
 
     @overload
     def get_thread(
-        self, 
+        self,
         thread_id: str,
         api_key: Optional[str],
         api_base: Optional[str],
@@ -2441,8 +2449,8 @@ class OpenAIAssistantsAPI(BaseLLM):
         max_retries: Optional[int],
         organization: Optional[str],
         client: Optional[OpenAI],
-        aget_thread: Optional[Literal[False]], 
-    ) -> Thread: 
+        aget_thread: Optional[Literal[False]],
+    ) -> Thread:
         ...
 
     # fmt: on
@@ -2578,7 +2586,7 @@ class OpenAIAssistantsAPI(BaseLLM):
 
     @overload
     def run_thread(
-        self, 
+        self,
         thread_id: str,
         assistant_id: str,
         additional_instructions: Optional[str],
@@ -2593,14 +2601,14 @@ class OpenAIAssistantsAPI(BaseLLM):
         max_retries: Optional[int],
         organization: Optional[str],
         client,
-        arun_thread: Literal[True], 
+        arun_thread: Literal[True],
         event_handler: Optional[AssistantEventHandler],
     ) -> Coroutine[None, None, Run]:
         ...
 
     @overload
     def run_thread(
-        self, 
+        self,
         thread_id: str,
         assistant_id: str,
         additional_instructions: Optional[str],
@@ -2615,9 +2623,9 @@ class OpenAIAssistantsAPI(BaseLLM):
         max_retries: Optional[int],
         organization: Optional[str],
         client,
-        arun_thread: Optional[Literal[False]], 
+        arun_thread: Optional[Literal[False]],
         event_handler: Optional[AssistantEventHandler],
-    ) -> Run: 
+    ) -> Run:
         ...
 
     # fmt: on
