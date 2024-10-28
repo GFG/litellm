@@ -261,9 +261,9 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
         value = _remove_strict_from_schema(value)
 
         for tool in value:
-            openai_function_object: Optional[
-                ChatCompletionToolParamFunctionChunk
-            ] = None
+            openai_function_object: Optional[ChatCompletionToolParamFunctionChunk] = (
+                None
+            )
             if "function" in tool:  # tools list
                 _openai_function_object = ChatCompletionToolParamFunctionChunk(  # type: ignore
                     **tool["function"]
@@ -454,14 +454,14 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
             elif param == "seed":
                 optional_params["seed"] = value
             elif param == "reasoning_effort" and isinstance(value, str):
-                optional_params[
-                    "thinkingConfig"
-                ] = VertexGeminiConfig._map_reasoning_effort_to_thinking_budget(value)
+                optional_params["thinkingConfig"] = (
+                    VertexGeminiConfig._map_reasoning_effort_to_thinking_budget(value)
+                )
             elif param == "thinking":
-                optional_params[
-                    "thinkingConfig"
-                ] = VertexGeminiConfig._map_thinking_param(
-                    cast(AnthropicThinkingParam, value)
+                optional_params["thinkingConfig"] = (
+                    VertexGeminiConfig._map_thinking_param(
+                        cast(AnthropicThinkingParam, value)
+                    )
                 )
             elif param == "modalities" and isinstance(value, list):
                 response_modalities = []
@@ -974,20 +974,20 @@ class VertexGeminiConfig(VertexAIBaseConfig, BaseConfig):
 
             ## ADD METADATA TO RESPONSE ##
             setattr(model_response, "vertex_ai_grounding_metadata", grounding_metadata)
-            model_response._hidden_params[
-                "vertex_ai_grounding_metadata"
-            ] = grounding_metadata
+            model_response._hidden_params["vertex_ai_grounding_metadata"] = (
+                grounding_metadata
+            )
 
             setattr(model_response, "vertex_ai_safety_results", safety_ratings)
-            model_response._hidden_params[
-                "vertex_ai_safety_results"
-            ] = safety_ratings  # older approach - maintaining to prevent regressions
+            model_response._hidden_params["vertex_ai_safety_results"] = (
+                safety_ratings  # older approach - maintaining to prevent regressions
+            )
 
             ## ADD CITATION METADATA ##
             setattr(model_response, "vertex_ai_citation_metadata", citation_metadata)
-            model_response._hidden_params[
-                "vertex_ai_citation_metadata"
-            ] = citation_metadata  # older approach - maintaining to prevent regressions
+            model_response._hidden_params["vertex_ai_citation_metadata"] = (
+                citation_metadata  # older approach - maintaining to prevent regressions
+            )
 
         except Exception as e:
             raise VertexAIError(
@@ -1658,7 +1658,8 @@ class ModelResponseIterator:
 
     def _common_chunk_parsing_logic(self, chunk: str) -> GenericStreamingChunk:
         try:
-            chunk = litellm.CustomStreamWrapper._strip_sse_data_from_chunk(chunk) or ""
+            chunk = chunk.replace("data:", "")
+            chunk = chunk.strip()
             if len(chunk) > 0:
                 """
                 Check if initial chunk valid json
