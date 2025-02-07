@@ -75,7 +75,7 @@ class OpenAIOSeriesConfig(OpenAIGPTConfig):
             "top_logprobs",
         ]
 
-        o_series_only_param = ["reasoning_effort"]
+        o_series_only_param = ["reasoning_effort", "stream", "stream_options"]
 
         all_openai_params.extend(o_series_only_param)
 
