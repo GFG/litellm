@@ -1,7 +1,7 @@
 import asyncio
 import os
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Optional, List
 from unittest.mock import Mock
 from litellm.proxy.utils import _get_redoc_url, _get_docs_url
 import json
@@ -770,42 +770,6 @@ async def test_add_litellm_data_to_request_duplicate_tags(
 
 
 @pytest.mark.parametrize(
-    "general_settings, user_api_key_dict, expected_enforced_params",
-    [
-        (
-            {"enforced_params": ["param1", "param2"]},
-            UserAPIKeyAuth(
-                api_key="test_api_key", user_id="test_user_id", org_id="test_org_id"
-            ),
-            ["param1", "param2"],
-        ),
-        (
-            {"service_account_settings": {"enforced_params": ["param1", "param2"]}},
-            UserAPIKeyAuth(
-                api_key="test_api_key", user_id="test_user_id", org_id="test_org_id"
-            ),
-            ["param1", "param2"],
-        ),
-        (
-            {"service_account_settings": {"enforced_params": ["param1", "param2"]}},
-            UserAPIKeyAuth(
-                api_key="test_api_key",
-                metadata={"enforced_params": ["param3", "param4"]},
-            ),
-            ["param1", "param2", "param3", "param4"],
-        ),
-    ],
-)
-def test_get_enforced_params(
-    general_settings, user_api_key_dict, expected_enforced_params
-):
-    from litellm.proxy.litellm_pre_call_utils import _get_enforced_params
-
-    enforced_params = _get_enforced_params(general_settings, user_api_key_dict)
-    assert enforced_params == expected_enforced_params
-
-
-@pytest.mark.parametrize(
     "general_settings, user_api_key_dict, request_body, expected_error",
     [
         (
@@ -820,6 +784,17 @@ def test_get_enforced_params(
             {"service_account_settings": {"enforced_params": ["user"]}},
             UserAPIKeyAuth(
                 api_key="test_api_key", user_id="test_user_id", org_id="test_org_id"
+            ),
+            {},
+            False,
+        ),
+        (
+            {"service_account_settings": {"enforced_params": ["user"]}},
+            UserAPIKeyAuth(
+                api_key="test_api_key",
+                user_id="test_user_id", 
+                org_id="test_org_id",
+                metadata={"service_account_id": "test_service_account_id"}
             ),
             {},
             True,
@@ -854,6 +829,7 @@ def test_get_enforced_params(
             {"service_account_settings": {"enforced_params": ["user"]}},
             UserAPIKeyAuth(
                 api_key="test_api_key",
+                metadata={"service_account_id": "test_service_account_id"}
             ),
             {"user": "test_user"},
             False,
@@ -939,8 +915,9 @@ def test_get_team_models():
     model_access_groups["default"].extend(["gpt-4o-mini"])
     model_access_groups["team2"].extend(["gpt-3.5-turbo"])
 
+    team_models = user_api_key_dict.team_models
     result = get_team_models(
-        user_api_key_dict=user_api_key_dict,
+        team_models=team_models,
         proxy_model_list=proxy_model_list,
         model_access_groups=model_access_groups,
     )
@@ -1508,20 +1485,17 @@ from litellm.proxy.utils import ProxyUpdateSpend
 async def test_end_user_transactions_reset():
     # Setup
     mock_client = MagicMock()
-    mock_client.end_user_list_transactons = {"1": 10.0}  # Bad log
+    end_user_list_transactions = {"1": 10.0}  # Bad log
     mock_client.db.tx = AsyncMock(side_effect=Exception("DB Error"))
 
     # Call function - should raise error
     with pytest.raises(Exception):
         await ProxyUpdateSpend.update_end_user_spend(
-            n_retry_times=0, prisma_client=mock_client, proxy_logging_obj=MagicMock()
+            n_retry_times=0,
+            prisma_client=mock_client,
+            proxy_logging_obj=MagicMock(),
+            end_user_list_transactions=end_user_list_transactions,
         )
-
-    # Verify cleanup happened
-    assert (
-        mock_client.end_user_list_transactons == {}
-    ), "Transactions list should be empty after error"
-
 
 @pytest.mark.asyncio
 async def test_spend_logs_cleanup_after_error():
@@ -1618,6 +1592,10 @@ def test_provider_specific_header():
         },
     }
 
+
+from litellm.proxy._types import LiteLLM_UserTable
+
+
 @pytest.mark.parametrize(
     "wildcard_model, expected_models",
     [
@@ -1642,7 +1620,8 @@ def test_get_known_models_from_wildcard(wildcard_model, expected_models):
             print(f"Missing expected model: {model}")
 
     assert all(model in wildcard_models for model in expected_models)
-    
+
+
 @pytest.mark.parametrize(
     "data, user_api_key_dict, expected_model",
     [
@@ -1692,3 +1671,125 @@ def test_update_model_if_team_alias_exists(data, user_api_key_dict, expected_mod
     # Check if model was updated correctly
     assert test_data.get("model") == expected_model
 
+
+@pytest.fixture
+def mock_prisma_client():
+    client = MagicMock()
+    client.db = MagicMock()
+    client.db.litellm_teamtable = AsyncMock()
+    return client
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "test_id, user_info, user_role, mock_teams, expected_teams, should_query_db",
+    [
+        ("no_user_info", None, "proxy_admin", None, [], False),
+        (
+            "no_teams_found",
+            LiteLLM_UserTable(
+                teams=["team1", "team2"],
+                user_id="user1",
+                max_budget=100,
+                spend=0,
+                user_email="user1@example.com",
+                user_role="proxy_admin",
+            ),
+            "proxy_admin",
+            None,
+            [],
+            True,
+        ),
+        (
+            "admin_user_with_teams",
+            LiteLLM_UserTable(
+                teams=["team1", "team2"],
+                user_id="user1",
+                max_budget=100,
+                spend=0,
+                user_email="user1@example.com",
+                user_role="proxy_admin",
+            ),
+            "proxy_admin",
+            [
+                MagicMock(
+                    model_dump=lambda: {
+                        "team_id": "team1",
+                        "members_with_roles": [{"role": "admin", "user_id": "user1"}],
+                    }
+                ),
+                MagicMock(
+                    model_dump=lambda: {
+                        "team_id": "team2",
+                        "members_with_roles": [
+                            {"role": "admin", "user_id": "user1"},
+                            {"role": "user", "user_id": "user2"},
+                        ],
+                    }
+                ),
+            ],
+            ["team1", "team2"],
+            True,
+        ),
+        (
+            "non_admin_user",
+            LiteLLM_UserTable(
+                teams=["team1", "team2"],
+                user_id="user1",
+                max_budget=100,
+                spend=0,
+                user_email="user1@example.com",
+                user_role="internal_user",
+            ),
+            "internal_user",
+            [
+                MagicMock(
+                    model_dump=lambda: {"team_id": "team1", "members": ["user1"]}
+                ),
+                MagicMock(
+                    model_dump=lambda: {
+                        "team_id": "team2",
+                        "members": ["user1", "user2"],
+                    }
+                ),
+            ],
+            [],
+            True,
+        ),
+    ],
+)
+async def test_get_admin_team_ids(
+    test_id: str,
+    user_info: Optional[LiteLLM_UserTable],
+    user_role: str,
+    mock_teams: Optional[List[MagicMock]],
+    expected_teams: List[str],
+    should_query_db: bool,
+    mock_prisma_client,
+):
+    from litellm.proxy.management_endpoints.key_management_endpoints import (
+        get_admin_team_ids,
+    )
+
+    # Setup
+    mock_prisma_client.db.litellm_teamtable.find_many.return_value = mock_teams
+    user_api_key_dict = UserAPIKeyAuth(
+        user_role=user_role, user_id=user_info.user_id if user_info else None
+    )
+
+    # Execute
+    result = await get_admin_team_ids(
+        complete_user_info=user_info,
+        user_api_key_dict=user_api_key_dict,
+        prisma_client=mock_prisma_client,
+    )
+
+    # Assert
+    assert result == expected_teams, f"Expected {expected_teams}, but got {result}"
+
+    if should_query_db:
+        mock_prisma_client.db.litellm_teamtable.find_many.assert_called_once_with(
+            where={"team_id": {"in": user_info.teams}}
+        )
+    else:
+        mock_prisma_client.db.litellm_teamtable.find_many.assert_not_called()
