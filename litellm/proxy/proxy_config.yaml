@@ -1,16 +1,24 @@
 model_list:
-  - model_name: openai/*
+  - model_name: fake-openai-endpoint
     litellm_params:
-      model:  openai/*
-      api_key: os.environ/OPENAI_API_KEY
-    model_info:
-      health_check_model: openai/gpt-4o-mini
-  - model_name: anthropic/*
+      model: openai/fake
+      api_key: fake-key
+      api_base: https://exampleopenaiendpoint-production.up.railway.app/
+  - model_name: openai/gpt-4o
     litellm_params:
-      model: anthropic/*
-      api_key: os.environ/ANTHROPIC_API_KEY
-    model_info:
-      health_check_model: anthropic/claude-3-5-sonnet-20240620
+      model: openai/gpt-4o
+      api_key: fake-key
 
 litellm_settings:
-  callbacks: ["prometheus"]
+  default_team_settings:
+      - team_id: test_dev
+        success_callback: ["langfuse", "s3"]
+        langfuse_secret: secret-test-key
+        langfuse_public_key: public-test-key
+      - team_id: my_workflows
+        success_callback: ["langfuse", "s3"]
+        langfuse_secret: secret-workflows-key
+        langfuse_public_key: public-workflows-key
+
+router_settings:
+  enable_tag_filtering: True # 👈 Key Change
